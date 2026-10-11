@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>霓虹贪吃蛇 · 闯关</title>
+<style>
+  :root{
+    --cyan:#0ff; --pink:#f0f; --gold:#fd0; --bg:#05060a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{
+    height:100%;
+    background:radial-gradient(circle at 50% 40%, #0a1020 0%, #05060a 70%);
+    color:#cff;
+    font-family:"Consolas","Courier New",monospace;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+    user-select:none;
+  }
+  #wrap{position:relative; width:576px;}
+  /* 顶部 HUD */
+  #hud{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:6px 10px; margin-bottom:8px;
+    font-size:15px; letter-spacing:1px;
+    border:1px solid rgba(0,255,255,.35);
+    border-radius:8px;
+    background:rgba(0,255,255,.04);
+    box-shadow:0 0 18px rgba(0,255,255,.18) inset, 0 0 10px rgba(0,255,255,.15);
+    text-shadow:0 0 8px var(--cyan);
+  }
+  #hud b{color:#fff; text-shadow:0 0 10px var(--cyan);}
+  #lives{letter-spacing:3px; color:#f66; text-shadow:0 0 10px #f33;}
+  #best{color:var(--gold); text-shadow:0 0 8px var(--gold);}
+
+  /* 画布 */
+  canvas{
+    display:block; width:576px; height:576px;
+    border:1px solid rgba(0,255,255,.4);
+    border-radius:10px;
+    box-shadow:0 0 30px rgba(0,255,255,.25), 0 0 80px rgba(255,0,255,.12);
+    background:var(--bg);
+  }
+
+  /* 遮罩面板通用 */
+  .overlay{
+    position:absolute; inset:0;
+    display:none; flex-direction:column;
+    align-items:center; justify-content:center;
+    text-align:center;
+    background:rgba(3,6,14,.82);
+    backdrop-filter:blur(3px);
+    border-radius:10px;
+    z-index:10;
+  }
+  .overlay.show{display:flex;}
+  .overlay h1{
+    font-size:40px; letter-spacing:6px; margin-bottom:14px;
+    color:#fff;
+    text-shadow:0 0 12px var(--cyan), 0 0 28px var(--pink);
+  }
+  .overlay h2{
+    font-size:26px; letter-spacing:3px; margin-bottom:12px;
+    color:#fff; text-shadow:0 0 12px var(--cyan);
+  }
+  .overlay p{font-size:15px; line-height:1.9; color:#9fe; text-shadow:0 0 6px rgba(0,255,255,.5);}
+  .overlay .big{font-size:22px; color:var(--gold); text-shadow:0 0 12px var(--gold); margin:6px 0 14px;}
+  .overlay .key{color:var(--pink); text-shadow:0 0 8px var(--pink);}
+  .btn{
+    margin-top:16px; padding:10px 26px; font-size:16px; letter-spacing:3px;
+    color:#fff; background:transparent; cursor:pointer;
+    border:1px solid var(--cyan); border-radius:6px;
+    text-shadow:0 0 8px var(--cyan);
+    box-shadow:0 0 16px rgba(0,255,255,.35), 0 0 24px rgba(0,255,255,.2) inset;
+    transition:.15s;
+    font-family:inherit;
+  }
+  .btn:hover{background:rgba(0,255,255,.12); box-shadow:0 0 26px rgba(0,255,255,.6);}
+  .legend{margin-top:18px; font-size:13px; line-height:2; color:#8ef;}
+  .dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="hud">
+    <span>关卡 <b id="lv">1</b>/10</span>
+    <span>分数 <b id="sc">0</b></span>
+    <span>进度 <b id="pg">0/5</b></span>
+    <span id="lives">❤❤❤</span>
+  </div>
+
+  <canvas id="game" width="576" height="576"></canvas>
+
+  <!-- 开始界面 -->
+  <div class="overlay show" id="menu">
+    <h1>霓虹贪吃蛇</h1>
+    <p>闯关模式 · 共 10 关 · 生命 3 条</p>
+    <div class="legend">
+      <div><span class="dot" style="background:#0ff;box-shadow:0 0 10px #0ff"></span>普通食物 +10 分</div>
+      <div><span class="dot" style="background:#fd0;box-shadow:0 0 10px #fd0"></span>金色食物 +50 分</div>
+      <div><span class="dot" style="background:#f0f;box-shadow:0 0 10px #f0f"></span>毒药 -10 分 并缩短身体</div>
+      <div style="margin-top:10px">
+        <span class="key">WASD / 方向键</span> 移动 ·
+        <span class="key">空格</span> 暂停 ·
+        <span class="key">R</span> 重玩本关
+      </div>
+    </div>
+    <button class="btn" id="btnStart">按 Enter 开始</button>
+  </div>
+
+  <!-- 暂停界面 -->
+  <div class="overlay" id="pause">
+    <h2>已暂停</h2>
+    <p>按 <span class="key">空格</span> 继续</p>
+  </div>
+
+  <!-- 过关结算 -->
+  <div class="overlay" id="clear">
+    <h2 id="clearTitle">过关！</h2>
+    <div class="big" id="clearScore">本关得分 0</div>
+    <p id="clearInfo">当前总分 0</p>
+    <p>按 <span class="key">Enter</span> 继续</p>
+  </div>
+
+  <!-- 游戏结束 -->
+  <div class="overlay" id="over">
+    <h1 id="overTitle">GAME OVER</h1>
+    <div class="big" id="overScore">总分 0</div>
+    <p id="overBest">最高分 0</p>
+    <p>按 <span class="key">Enter</span> 重新开始</p>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   常量与关卡配置
+   ========================================================= */
+const COLS = 24, ROWS = 24, CELL = 24;
+const W = COLS * CELL, H = ROWS * CELL;
+
+// 每关：target 目标食物数 / step 逻辑步进间隔(ms，越小越快) / spawn 出生点 / dir 初始方向 / walls 障碍坐标
+const LEVELS = [
+  // 1 空场
+  { target:5, step:150, spawn:{x:5,y:12},  dir:{x:1,y:0},  walls:[] },
+  // 2 单柱
+  { target:6, step:140, spawn:{x:3,y:12},  dir:{x:1,y:0},  walls:block(11,10,3,3) },
+  // 3 十字
+  { target:7, step:130, spawn:{x:5,y:12},  dir:{x:1,y:0},  walls:[
+      ...block(11,7,2,10), ...block(7,11,10,2)
+  ]},
+  // 4 回字
+  { target:8, step:120, spawn:{x:12,y:12}, dir:{x:1,y:0},  walls:ring(5,5,14,14) },
+  // 5 走廊
+  { target:8, step:112, spawn:{x:2,y:2},   dir:{x:1,y:0},  walls:[
+      ...block(4,0,1,18), ...block(9,6,1,18), ...block(14,0,1,18), ...block(19,6,1,18)
+  ]},
+  // 6 对角阵
+  { target:9, step:105, spawn:{x:3,y:3},   dir:{x:1,y:0},  walls:[
+      ...block(5,5,2,2), ...block(10,10,2,2), ...block(15,15,2,2),
+      ...block(18,6,2,2), ...block(6,18,2,2)
+  ]},
+  // 7 对称柱阵
+  { target:9, step:98,  spawn:{x:12,y:22}, dir:{x:0,y:-1}, walls:[
+      ...block(5,5,2,2), ...block(17,5,2,2),
+      ...block(5,17,2,2), ...block(17,17,2,2),
+      ...block(11,11,2,2)
+  ]},
+  // 8 窄门
+  { target:10,step:92,  spawn:{x:2,y:12},  dir:{x:1,y:0},  walls:[
+      ...block(6,0,1,10), ...block(6,14,1,10),
+      ...block(12,0,1,9), ...block(12,15,1,9),
+      ...block(18,0,1,10),...block(18,14,1,10)
+  ]},
+  // 9 螺旋
+  { target:10,step:85,  spawn:{x:2,y:2},   dir:{x:1,y:0},  walls:[
+      ...block(4,4,16,1), ...block(4,5,1,13),
+      ...block(19,5,1,15),...block(5,19,15,1),
+      ...block(8,8,10,1), ...block(8,9,1,8),
+      ...block(17,9,1,10),...block(9,17,8,1)
+  ]},
+  // 10 综合迷宫
+  { target:12,step:75,  spawn:{x:12,y:12}, dir:{x:1,y:0},  walls:[
+      ...block(3,3,6,1),  ...block(3,3,1,6),
+      ...block(14,3,7,1), ...block(20,3,1,6),
+      ...block(3,20,6,1), ...block(3,14,1,7),
+      ...block(14,20,7,1),...block(20,14,1,7),
+      ...block(11,11,2,2)
+  ]},
+];
+
+// 生成矩形障碍块
+function block(x,y,w,h){
+  const a=[];
+  for(let i=0;i<w;i++) for(let j=0;j<h;j++) a.push([x+i,y+j]);
+  return a;
+}
+// 生成空心矩形（回字外框）
+function ring(x,y,w,h){
+  const a=[];
+  for(let i=0;i<w;i++){ a.push([x+i,y]); a.push([x+i,y+h-1]); }
+  for(let j=1;j<h-1;j++){ a.push([x,y+j]); a.push([x+w-1,y+j]); }
+  // 开两个缺口，保证内部可达
+  return a.filter(([px,py]) => !(px===x && py===y+6) && !(px===x+w-1 && py===y+h-7));
+}
+
+// 食物类型
+const FOOD_TYPES = {
+  NORMAL:{ score:10,  grow:1,  color:'#0ff', weight:70 },
+  GOLD:  { score:50,  grow:2,  color:'#fd0', weight:20 },
+  POISON:{ score:-10, grow:-2, color:'#f0f', weight:10 },
+};
+
+/* =========================================================
+   游戏状态
+   ========================================================= */
+const STATE = { MENU:'menu', PLAYING:'playing', PAUSED:'paused', CLEAR:'clear', OVER:'over' };
+let state = STATE.MENU;
+
+let levelIndex = 0;      // 当前关索引
+let score = 0;           // 总分
+let lives = 3;           // 生命
+let eatenCount = 0;      // 本关已吃普通/金色食物数（毒药不计）
+let levelScore = 0;      // 本关得分（用于结算展示）
+
+let snake = null;        // { body:[{x,y}...], dir:{x,y} }
+let foods = [];          // [{x,y,type}]
+let walls = [];          // 障碍集合 Set("x,y")
+let particles = [];      // 粒子
+let inputQueue = [];     // 输入队列
+
+let acc = 0, lastT = 0, stepMs = 150;
+let foodPulse = 0;       // 食物呼吸计时
+
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+
+/* =========================================================
+   DOM 引用
+   ========================================================= */
+const elLv = document.getElementById('lv');
+const elSc = document.getElementById('sc');
+const elPg = document.getElementById('pg');
+const elLives = document.getElementById('lives');
+const elMenu = document.getElementById('menu');
+const elPause = document.getElementById('pause');
+const elClear = document.getElementById('clear');
+const elOver = document.getElementById('over');
+const elClearTitle = document.getElementById('clearTitle');
+const elClearScore = document.getElementById('clearScore');
+const elClearInfo = document.getElementById('clearInfo');
+const elOverTitle = document.getElementById('overTitle');
+const elOverScore = document.getElementById('overScore');
+const elOverBest = document.getElementById('overBest');
+
+/* =========================================================
+   工具函数
+   ========================================================= */
+const key = (x,y) => x + ',' + y;
+const rnd = n => Math.floor(Math.random()*n);
+
+function weightedFoodType(){
+  const total = FOOD_TYPES.NORMAL.weight + FOOD_TYPES.GOLD.weight + FOOD_TYPES.POISON.weight;
+  let r = Math.random() * total;
+  if ((r -= FOOD_TYPES.NORMAL.weight) < 0) return 'NORMAL';
+  if ((r -= FOOD_TYPES.GOLD.weight) < 0) return 'GOLD';
+  return 'POISON';
+}
+
+function isWall(p){ return walls.has(key(p.x,p.y)); }
+function isSnake(p){
+  return snake.body.some(s => s.x===p.x && s.y===p.y);
+}
+function foodAt(p){
+  return foods.findIndex(f => f.x===p.x && f.y===p.y);
+}
+
+/* =========================================================
+   HUD 更新
+   ========================================================= */
+function updateHUD(){
+  elLv.textContent = levelIndex + 1;
+  elSc.textContent = score;
+  elPg.textContent = eatenCount + '/' + LEVELS[levelIndex].target;
+  elLives.textContent = '❤'.repeat(lives) + '♡'.repeat(Math.max(0,3-lives));
+}
+
+/* =========================================================
+   初始化 / 复位
+   ========================================================= */
+function loadLevel(idx){
+  levelIndex = idx;
+  const lv = LEVELS[idx];
+
+  walls = new Set(lv.walls.map(([x,y]) => key(x,y)));
+  stepMs = lv.step;
+  acc = 0;
+  eatenCount = 0;
+  levelScore = 0;
+  inputQueue = [];
+  particles = [];
+
+  // 蛇：初始长度 3，从出生点向反方向延伸
+  const d = lv.dir;
+  const body = [];
+  for (let i=0;i<3;i++){
+    body.push({ x: lv.spawn.x - d.x*i, y: lv.spawn.y - d.y*i });
+  }
+  snake = { body, dir: {x:d.x, y:d.y} };
+
+  foods = [];
+  for (let i=0;i<2;i++) spawnFood();
+
+  updateHUD();
+}
+
+// 出生点复活（生命-1 后原地复活）
+function respawn(){
+  const lv = LEVELS[levelIndex];
+  const d = lv.dir;
+  const body = [];
+  for (let i=0;i<3;i++){
+    body.push({ x: lv.spawn.x - d.x*i, y: lv.spawn.y - d.y*i });
+  }
+  snake = { body, dir:{x:d.x, y:d.y} };
+  inputQueue = [];
+  acc = 0;
+
+  // 清掉重生点上可能与蛇重叠的食物
+  foods = foods.filter(f => !body.some(s => s.x===f.x && s.y===f.y));
+  while (foods.length < 2) spawnFood();
+}
+
+function spawnFood(){
+  let tries = 0;
+  while (tries++ < 800){
+    const p = { x: rnd(COLS), y: rnd(ROWS) };
+    if (isWall(p) || isSnake(p) || foodAt(p) >= 0) continue;
+    foods.push({ x:p.x, y:p.y, type: weightedFoodType() });
+    return;
+  }
+}
+
+/* =========================================================
+   输入队列
+   ========================================================= */
+function pushDir(d){
+  const last = inputQueue.length ? inputQueue[inputQueue.length-1] : snake.dir;
+  // 禁止 180° 掉头
+  if (d.x === -last.x && d.y === -last.y) return;
+  // 相同方向忽略
+  if (d.x === last.x && d.y === last.y) return;
+  if (inputQueue.length < 2) inputQueue.push(d);
+}
+
+const KEYMAP = {
+  ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}, ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0},
+  w:{x:0,y:-1}, s:{x:0,y:1}, a:{x:-1,y:0}, d:{x:1,y:0},
+  W:{x:0,y:-1}, S:{x:0,y:1}, A:{x:-1,y:0}, D:{x:1,y:0},
+};
+
+window.addEventListener('keydown', e => {
+  // 防止方向键滚动页面
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+
+  switch (state){
+    case STATE.MENU:
+      if (e.key === 'Enter'){ startGame(); }
+      break;
+
+    case STATE.PLAYING:
+      if (e.key === ' '){ togglePause(); return; }
+      if (e.key === 'r' || e.key === 'R'){ restartLevel(); return; }
+      if (KEYMAP[e.key]) pushDir(KEYMAP[e.key]);
+      break;
+
+    case STATE.PAUSED:
+      if (e.key === ' ') togglePause();
+      break;
+
+    case STATE.CLEAR:
+      if (e.key === 'Enter'){ nextLevel(); }
+      break;
+
+    case STATE.OVER:
+      if (e.key === 'Enter'){ state = STATE.MENU; showOnly(elMenu); }
+      break;
+  }
+});
+
+document.getElementById('btnStart').addEventListener('click', startGame);
+
+/* =========================================================
+   状态切换
+   ========================================================= */
+function showOnly(el){
+  [elMenu, elPause, elClear, elOver].forEach(o => o.classList.remove('show'));
+  if (el) el.classList.add('show');
+}
+
+function startGame(){
+  score = 0;
+  lives = 3;
+  levelIndex = 0;
+  loadLevel(0);
+  state = STATE.PLAYING;
+  showOnly(null);
+  updateHUD();
+}
+
+function togglePause(){
+  if (state === STATE.PLAYING){
+    state = STATE.PAUSED;
+    showOnly(elPause);
+  } else if (state === STATE.PAUSED){
+    state = STATE.PLAYING;
+    showOnly(null);
+  }
+}
+
+function restartLevel(){
+  loadLevel(levelIndex);
+  state = STATE.PLAYING;
+  showOnly(null);
+  updateHUD();
+}
+
+function nextLevel(){
+  if (levelIndex + 1 >= LEVELS.length){
+    // 已通关
+    state = STATE.OVER;
+    elOverTitle.textContent = '恭喜通关！';
+    const best = Math.max(score, Number(localStorage.getItem('neonSnakeBest')||0));
+    localStorage.setItem('neonSnakeBest', best);
+    elOverScore.textContent = '总分 ' + score;
+    elOverBest.textContent = '最高分 ' + best;
+    showOnly(elOver);
+    return;
+  }
+  loadLevel(levelIndex + 1);
+  state = STATE.PLAYING;
+  showOnly(null);
+  updateHUD();
+}
+
+function gameOver(){
+  state = STATE.OVER;
+  const best = Math.max(score, Number(localStorage.getItem('neonSnakeBest')||0));
+  localStorage.setItem('neonSnakeBest', best);
+  elOverTitle.textContent = 'GAME OVER';
+  elOverScore.textContent = '总分 ' + score;
+  elOverBest.textContent = '最高分 ' + best;
+  showOnly(elOver);
+}
+
+/* =========================================================
+   逻辑步进
+   ========================================================= */
+function loseLife(){
+  lives--;
+  updateHUD();
+  burst(snake.body[0].x, snake.body[0].y, '#f33', 24);
+  if (lives <= 0){ gameOver(); return; }
+  respawn();
+  updateHUD();
+}
+
+function stepLogic(){
+  if (inputQueue.length) snake.dir = inputQueue.shift();
+
+  const head = {
+    x: snake.body[0].x + snake.dir.x,
+    y: snake.body[0].y + snake.dir.y
+  };
+
+  // 撞墙 / 撞障碍
+  if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS || isWall(head)){
+    loseLife(); return;
+  }
+  // 撞自己（尾巴即将移动的格子除外——这里简化处理，视为撞）
+  if (isSnake(head)){
+    loseLife(); return;
+  }
+
+  snake.body.unshift(head);
+
+  const fi = foodAt(head);
+  if (fi >= 0){
+    eatFood(fi);
+  } else {
+    snake.body.pop();
+  }
+}
+
+function eatFood(idx){
+  const f = foods[idx];
+  const t = FOOD_TYPES[f.type];
+  foods.splice(idx, 1);
+
+  // 得分与长度
+  score += t.score;
+  levelScore += t.score;
+  if (score < 0) score = 0;
+
+  if (t.grow > 0){
+    // 长身体：末尾复制一节
+    const tail = snake.body[snake.body.length-1];
+    for (let i=0;i<t.grow;i++) snake.body.push({ x:tail.x, y:tail.y });
+  } else if (t.grow < 0){
+    // 毒药：缩短身体，最少保留 2 节
+    const cut = -t.grow;
+    for (let i=0;i<cut;i++){
+      if (snake.body.length > 2) snake.body.pop();
+    }
+  }
+
+  // 只有普通/金色计入进度
+  if (f.type !== 'POISON'){
+    eatenCount++;
+  }
+
+  burst(f.x, f.y, t.color, f.type === 'GOLD' ? 26 : 16);
+  spawnFood();
+  updateHUD();
+
+  // 过关判定
+  const target = LEVELS[levelIndex].target;
+  if (eatenCount >= target){
+    // 奖励：剩余生命加分
+    score += lives * 20;
+    const best = Number(localStorage.getItem('neonSnakeBest')||0);
+    if (score > best) localStorage.setItem('neonSnakeBest', score);
+
+    state = STATE.CLEAR;
+    elClearTitle.textContent = (levelIndex+1 >= LEVELS.length) ? '最后一关完成！' : '过关！';
+    elClearScore.textContent = '本关得分 ' + levelScore;
+    elClearInfo.textContent = '当前总分 ' + score + ' · 生命奖励 +' + (lives*20);
+    showOnly(elClear);
+  }
+}
+
+/* =========================================================
+   粒子系统
+   ========================================================= */
+function burst(gx, gy, color, count){
+  const cx = gx*CELL + CELL/2;
+  const cy = gy*CELL + CELL/2;
+  for (let i=0;i<count;i++){
+    const ang = Math.random() * Math.PI * 2;
+    const spd = 40 + Math.random() * 160;
+    particles.push({
+      x: cx, y: cy,
+      vx: Math.cos(ang)*spd,
+      vy: Math.sin(ang)*spd,
+      life: 1,
+      decay: 1.6 + Math.random()*1.2,
+      size: 1.5 + Math.random()*2.5,
+      color
+    });
+  }
+}
+
+function updateParticles(dt){
+  const s = dt / 1000;
+  for (let i = particles.length-1; i>=0; i--){
+    const p = particles[i];
+    p.x += p.vx * s;
+    p.y += p.vy * s;
+    p.vx *= 0.96;
+    p.vy *= 0.96;
+    p.life -= p.decay * s;
+    if (p.life <= 0) particles.splice(i,1);
+  }
+}
+
+/* =========================================================
+   渲染
+   ========================================================= */
+function drawGrid(){
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,255,255,0.06)';
+  ctx.lineWidth = 1;
+  for (let i=1;i<COLS;i++){
+    ctx.beginPath(); ctx.moveTo(i*CELL, 0); ctx.lineTo(i*CELL, H); ctx.stroke();
+  }
+  for (let j=1;j<ROWS;j++){
+    ctx.beginPath(); ctx.moveTo(0, j*CELL); ctx.lineTo(W, j*CELL); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawWalls(){
+  ctx.save();
+  walls.forEach(k => {
+    const [x,y] = k.split(',').map(Number);
+    const px = x*CELL, py = y*CELL;
+    ctx.shadowColor = '#f0f';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = 'rgba(255,0,255,0.16)';
+    ctx.fillRect(px+1, py+1, CELL-2, CELL-2);
+    ctx.strokeStyle = 'rgba(255,0,255,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px+1.5, py+1.5, CELL-3, CELL-3);
+  });
+  ctx.restore();
+}
+
+function drawFood(){
+  const pulse = 1 + 0.15 * Math.sin(foodPulse / 180);
+  foods.forEach(f => {
+    const t = FOOD_TYPES[f.type];
+    const cx = f.x*CELL + CELL/2;
+    const cy = f.y*CELL + CELL/2;
+    const r = CELL * 0.28 * pulse;
+    ctx.save();
+    ctx.shadowColor = t.color;
+    ctx.shadowBlur = 22 * pulse;
+    ctx.fillStyle = t.color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fill();
+    // 内芯高光
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(cx - r*0.25, cy - r*0.25, r*0.35, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawSnake(){
+  const n = snake.body.length;
+  for (let i=n-1;i>=0;i--){
+    const s = snake.body[i];
+    const px = s.x*CELL, py = s.y*CELL;
+    const isHead = (i === 0);
+    // 头亮尾暗
+    const t = i / Math.max(1, n-1);
+    const hue = isHead ? '#0ff' : `rgba(0, ${Math.round(255 - 120*t)}, ${Math.round(255 - 40*t)}, 1)`;
+
+    ctx.save();
+    ctx.shadowColor = isHead ? '#0ff' : '#0aa';
+    ctx.shadowBlur = isHead ? 18 : 10;
+    ctx.fillStyle = hue;
+    ctx.beginPath();
+    const pad = isHead ? 1.5 : 2.5;
+    roundRect(ctx, px+pad, py+pad, CELL-pad*2, CELL-pad*2, 7);
+    ctx.fill();
+    ctx.restore();
+
+    if (isHead){
+      // 眼睛：沿方向垂直偏移
+      const d = snake.dir;
+      const cx = px + CELL/2, cy = py + CELL/2;
+      const offX = d.y !== 0 ? 5 : 0;
+      const offY = d.x !== 0 ? 5 : 0;
+      const fwdX = d.x * 3.5;
+      const fwdY = d.y * 3.5;
+
+      const eye = (sx, sy) => {
+        ctx.save();
+        ctx.shadowColor = '#fff'; ctx.shadowBlur = 8;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(sx, sy, 3, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#021';
+        ctx.beginPath();
+        ctx.arc(sx + d.x*1, sy + d.y*1, 1.4, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      };
+      eye(cx + offX + fwdX, cy + offY + fwdY);
+      eye(cx - offX + fwdX, cy - offY + fwdY);
+    }
+  }
+}
+
+// 圆角矩形路径
+function roundRect(ctx, x, y, w, h, r){
+  if (w < 2*r) r = w/2;
+  if (h < 2*r) r = h/2;
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y,   x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x,   y+h, r);
+  ctx.arcTo(x,   y+h, x,   y,   r);
+  ctx.arcTo(x,   y,   x+w, y,   r);
+  ctx.closePath();
+}
+
+function drawParticles(){
+  ctx.save();
+  particles.forEach(p => {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#05060a';
+  ctx.fillRect(0,0,W,H);
+
+  drawGrid();
+  drawWalls();
+  drawFood();
+  if (snake) drawSnake();
+  drawParticles();
+}
+
+/* =========================================================
+   主循环
+   ========================================================= */
+function loop(t){
+  requestAnimationFrame(loop);
+  const dt = Math.min(t - lastT, 100);
+  lastT = t;
+
+  // 视觉始终按真实时间更新
+  foodPulse += dt;
+  updateParticles(dt);
+
+  if (state === STATE.PLAYING){
+    acc += dt;
+    // 防止卡顿后连续跑太多步
+    let guard = 0;
+    while (acc >= stepMs && guard++ < 5){
+      acc -= stepMs;
+      stepLogic();
+      if (state !== STATE.PLAYING) break;
+    }
+  }
+
+  render();
+}
+
+/* =========================================================
+   启动
+   ========================================================= */
+// 预热初始化（让开始界面背后有静态画面）
+loadLevel(0);
+state = STATE.MENU;
+showOnly(elMenu);
+
+requestAnimationFrame(t => {
+  lastT = t;
+  loop(t);
+});
+</script>
+</body>
+</html>
