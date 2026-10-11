@@ -5,12 +5,12 @@
 <title>霓虹贪吃蛇 · 闯关</title>
 <style>
   :root{
-    --cyan:#0ff; --pink:#f0f; --gold:#fd0; --bg:#05060a;
+    --cyan:#0ff; --pink:#f0f; --gold:#fd0; --bg:#071a36;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{
     height:100%;
-    background:radial-gradient(circle at 50% 40%, #0a1020 0%, #05060a 70%);
+    background:radial-gradient(circle at 50% 40%, #0d2850 0%, #071a36 70%);
     color:#cff;
     font-family:"Consolas","Courier New",monospace;
     display:flex; align-items:center; justify-content:center;
@@ -636,10 +636,10 @@ function drawSnake(){
     const isHead = (i === 0);
     // 头亮尾暗
     const t = i / Math.max(1, n-1);
-    const hue = isHead ? '#0ff' : `rgba(0, ${Math.round(255 - 120*t)}, ${Math.round(255 - 40*t)}, 1)`;
+    const hue = isHead ? '#ffd700' : `rgba(255, ${Math.round(215 - 105*t)}, ${Math.round(80 - 50*t)}, 1)`;
 
     ctx.save();
-    ctx.shadowColor = isHead ? '#0ff' : '#0aa';
+    ctx.shadowColor = isHead ? '#ffd700' : '#cc9900';
     ctx.shadowBlur = isHead ? 18 : 10;
     ctx.fillStyle = hue;
     ctx.beginPath();
@@ -705,7 +705,7 @@ function drawParticles(){
 
 function render(){
   ctx.clearRect(0,0,W,H);
-  ctx.fillStyle = '#05060a';
+  ctx.fillStyle = '#071a36';
   ctx.fillRect(0,0,W,H);
 
   drawGrid();
